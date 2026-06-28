@@ -23,8 +23,8 @@ data:
   DB_USER: tempconverter
   DB_HOST: mysql
   DB_NAME: tempconverter
-  STUDENT: Your Name
-  COLLEGE: Algebra Bernays University
+  STUDENT: Roko
+  COLLEGE: Algebra
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -122,7 +122,7 @@ spec:
           command: [sh, -c, 'until nc -z mysql 3306; do sleep 2; done']
       containers:
         - name: tempconverter
-          image: YOUR_REGISTRY/tempconverter:dev
+          image: ghcr.io/rodonelli/tempconverter:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
