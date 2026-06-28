@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tempconverter
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tempconverter-secrets
+  namespace: tempconverter
+type: Opaque
+stringData:
+  DB_PASS: replace-with-a-strong-password
+  DB_ROOT_PASS: replace-with-a-different-strong-password
+  SECRET_KEY: replace-with-a-long-random-value
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempconverter-config
+  namespace: tempconverter
+data:
+  DB_USER: tempconverter
+  DB_HOST: mysql
+  DB_NAME: tempconverter
+  STUDENT: Your Name
+  COLLEGE: Algebra Bernays University
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-data
+  namespace: tempconverter
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: tempconverter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_DATABASE
+              valueFrom: {configMapKeyRef: {name: tempconverter-config, key: DB_NAME}}
+            - name: MYSQL_USER
+              valueFrom: {configMapKeyRef: {name: tempconverter-config, key: DB_USER}}
+            - name: MYSQL_PASSWORD
+              valueFrom: {secretKeyRef: {name: tempconverter-secrets, key: DB_PASS}}
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: tempconverter-secrets, key: DB_ROOT_PASS}}
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD" --silent']
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mysql-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: tempconverter
+spec:
+  selector:
+    app: mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempconverter
+  namespace: tempconverter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tempconverter
+  template:
+    metadata:
+      labels:
+        app: tempconverter
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: tempconverter
+              topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox:1.36
+          command: [sh, -c, 'until nc -z mysql 3306; do sleep 2; done']
+      containers:
+        - name: tempconverter
+          image: YOUR_REGISTRY/tempconverter:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: tempconverter-config
+            - secretRef:
+                name: tempconverter-secrets
+          readinessProbe:
+            httpGet: {path: /healthz, port: 5000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 5000}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempconverter
+  namespace: tempconverter
+spec:
+  type: LoadBalancer
+  selector:
+    app: tempconverter
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000

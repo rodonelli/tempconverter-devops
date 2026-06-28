@@ -1,0 +1,29 @@
+name: test-and-build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install test dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run unit tests
+        run: pytest -q tests/test_app.py
+      - name: Build and start integration stack
+        run: docker compose -f compose.ci.yml up --build --detach --wait
+      - name: Run integration tests
+        run: pytest -q tests/integration_test.py
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose -f compose.ci.yml logs
+      - name: Stop integration stack
+        if: always()
+        run: docker compose -f compose.ci.yml down --volumes

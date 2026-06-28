@@ -1,0 +1,39 @@
+services:
+  db:
+    image: docker.io/library/mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-tempconverter}
+      MYSQL_USER: ${DB_USER:-tempconverter}
+      MYSQL_PASSWORD: ${DB_PASS}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      args:
+        IMAGE_VARIANT: dev
+    environment:
+      DB_USER: ${DB_USER:-tempconverter}
+      DB_PASS: ${DB_PASS}
+      DB_HOST: db
+      DB_NAME: ${DB_NAME:-tempconverter}
+      STUDENT: ${STUDENT}
+      COLLEGE: ${COLLEGE}
+      SECRET_KEY: ${SECRET_KEY}
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
