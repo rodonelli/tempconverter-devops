@@ -16,11 +16,11 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements-dev.txt
       - name: Run unit tests
-        run: pytest -q tests/test_app.py
+        run: python -m pytest -q tests/test_app.py
       - name: Build and start integration stack
         run: docker compose -f compose.ci.yml up --build --detach --wait
       - name: Run integration tests
-        run: pytest -q tests/integration_test.py
+        run: python -m pytest -q tests/integration_test.py
       - name: Show container logs on failure
         if: failure()
         run: docker compose -f compose.ci.yml logs
